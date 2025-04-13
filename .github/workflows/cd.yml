@@ -1,0 +1,94 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - "**"
+    branches:
+      - main
+      
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'stg'
+        type: choice
+        options:
+          - stg
+          - prd
+
+env:
+  BASE_NAME: "atlantis"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.inputs.environment || 'stg' }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'stg' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'stg' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set Environment Variables
+        run: |
+          ENV=${{ github.event.inputs.environment || 'stg' }}
+          echo "ACR_NAME=acr${env.BASE_NAME}${ENV}" >> $GITHUB_ENV
+          echo "ACR_RESOURCE_GROUP=rg-shared-${ENV}" >> $GITHUB_ENV
+          echo "ACR_URL=acr${env.BASE_NAME}${ENV}.azurecr.io" >> $GITHUB_ENV
+
+      - name: Docker auth
+        run: |
+          az acr login --name ${{ env.ACR_NAME }} --resource-group ${{ env.ACR_RESOURCE_GROUP }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        if: github.event_name == 'push' || github.event.inputs.environment == 'stg'
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          attests: ""
+          tags: ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:${{ github.event.inputs.environment || 'stg' }}
+          cache-from: type=gha,ref=${{ env.ACR_URL }}/${{ env.BASE_NAME }}:buildcache
+          cache-to: type=gha,ref=${{ env.ACR_URL }}/${{ env.BASE_NAME }}:buildcache,mode=max
+
+      - name: Promote image
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prd'
+        uses: azure/CLI@v1
+        with:
+          inlineScript: |
+            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:stg --image ${{ env.BASE_NAME }}:prd
+            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE }}:stg --image ${{ env.BASE_NAME }}:$(date +%Y%m%d-%H%M%S)
+
+      - name: Deploy Infrastructure
+        uses: ./.github/actions/terraform-deploy
+        with:
+          environment: ${{ github.event.inputs.environment || 'stg' }}
+          image_tag: ${{ github.event.inputs.environment || 'stg' }}
+          backend_config: |
+            subscription_id      = "7bc4b637-e7b0-4cf5-8105-b46e1c86cb83"
+            resource_group_name  = "rg-factory-mgmt"
+            storage_account_name = "safactorymgmt"
+            container_name       = "atlantis-${{ github.event.inputs.environment || 'stg' }}-state"
+            key                  = "terraform.tfstate"
