@@ -1,0 +1,8 @@
+directory: .
+compact: true
+quiet: true
+framework: terraform
+# skip-check:
+#   - CKV_TF_1
+#   - CKV_TF_2
+#   - CKV_GCP_117
