@@ -1,4 +1,4 @@
-name: CD
+name: Build and Push Image
 
 on:
   push:
@@ -39,19 +39,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Set Environment Variables
         run: |
           ENV=${{ github.event.inputs.environment || 'stg' }}
           echo "ACR_NAME=acr${env.BASE_NAME}${ENV}" >> $GITHUB_ENV
           echo "ACR_RESOURCE_GROUP=rg-shared-${ENV}" >> $GITHUB_ENV
           echo "ACR_URL=acr${env.BASE_NAME}${ENV}.azurecr.io" >> $GITHUB_ENV
+          if [ "$ENV" = "stg" ]; then
+            echo "ARM_SUBSCRIPTION_ID=${{ vars.ARM_SUBSCRIPTION_ID_STG }}" >> $GITHUB_ENV
+          else
+            echo "ARM_SUBSCRIPTION_ID=${{ vars.ARM_SUBSCRIPTION_ID_PRD }}" >> $GITHUB_ENV
+          fi
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ vars.ARM_CLIENT_ID }}
+          tenant-id: ${{ vars.ARM_TENANT_ID }}
+          subscription-id: ${{ env.ARM_SUBSCRIPTION_ID }}
 
       - name: Docker auth
         run: |
@@ -79,7 +84,7 @@ jobs:
         with:
           inlineScript: |
             az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:stg --image ${{ env.BASE_NAME }}:prd
-            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE }}:stg --image ${{ env.BASE_NAME }}:$(date +%Y%m%d-%H%M%S)
+            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:stg --image ${{ env.BASE_NAME }}:$(date +%Y%m%d-%H%M%S)
 
       - name: Deploy Infrastructure
         uses: ./.github/actions/terraform-deploy
