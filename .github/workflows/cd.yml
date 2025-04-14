@@ -19,7 +19,8 @@ on:
           - prd
 
 env:
-  BASE_NAME: "atlantis"
+  BASE_NAME: "shared"
+  IMAGE_NAME: "atlantis"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.inputs.environment || 'stg' }}
@@ -74,17 +75,17 @@ jobs:
           provenance: false
           sbom: false
           attests: ""
-          tags: ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:${{ github.event.inputs.environment || 'stg' }}
-          cache-from: type=gha,ref=${{ env.ACR_URL }}/${{ env.BASE_NAME }}:buildcache
-          cache-to: type=gha,ref=${{ env.ACR_URL }}/${{ env.BASE_NAME }}:buildcache,mode=max
+          tags: ${{ env.ACR_URL }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.environment || 'stg' }}
+          cache-from: type=gha,ref=${{ env.ACR_URL }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=gha,ref=${{ env.ACR_URL }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Promote image
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prd'
         uses: azure/CLI@v1
         with:
           inlineScript: |
-            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:stg --image ${{ env.BASE_NAME }}:prd
-            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.BASE_NAME }}:stg --image ${{ env.BASE_NAME }}:$(date +%Y%m%d-%H%M%S)
+            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.IMAGE_NAME }}:stg --image ${{ env.IMAGE_NAME }}:prd
+            az acr import --name ${{ env.ACR_NAME }} --source ${{ env.ACR_URL }}/${{ env.IMAGE_NAME }}:stg --image ${{ env.IMAGE_NAME }}:$(date +%Y%m%d-%H%M%S)
 
       - name: Deploy Infrastructure
         uses: ./.github/actions/terraform-deploy
