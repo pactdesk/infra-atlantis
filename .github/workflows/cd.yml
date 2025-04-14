@@ -42,9 +42,9 @@ jobs:
       - name: Set Environment Variables
         run: |
           ENV=${{ github.event.inputs.environment || 'stg' }}
-          echo "ACR_NAME=acr${env.BASE_NAME}${ENV}" >> $GITHUB_ENV
+          echo "ACR_NAME=acr${BASE_NAME}${ENV}" >> $GITHUB_ENV
           echo "ACR_RESOURCE_GROUP=rg-shared-${ENV}" >> $GITHUB_ENV
-          echo "ACR_URL=acr${env.BASE_NAME}${ENV}.azurecr.io" >> $GITHUB_ENV
+          echo "ACR_URL=acr${BASE_NAME}${ENV}.azurecr.io" >> $GITHUB_ENV
           if [ "$ENV" = "stg" ]; then
             echo "ARM_SUBSCRIPTION_ID=${{ vars.ARM_SUBSCRIPTION_ID_STG }}" >> $GITHUB_ENV
           else
